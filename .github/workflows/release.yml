@@ -25,7 +25,7 @@ jobs:
       - id: version
         run: |
           VERSION="$(cat VERSION)"
-          ASSET="dist/deterministic-workflow-builder-skill-v${VERSION}.zip"
+          ASSET="dist/deterministic-workflow-builder-v${VERSION}.zip"
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "asset=${ASSET}" >> "${GITHUB_OUTPUT}"
           if [ ! -f "${ASSET}" ]; then

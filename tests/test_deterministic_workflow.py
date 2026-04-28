@@ -957,7 +957,7 @@ class DeterministicWorkflowTests(unittest.TestCase):
             packaged = run_command("python3", str(PACKAGE_SCRIPT), "--output-dir", str(output_dir))
             self.assertEqual(packaged.returncode, 0, packaged.stderr)
 
-            archives = sorted(output_dir.glob("deterministic-workflow-builder-skill-v*.zip"))
+            archives = sorted(output_dir.glob("deterministic-workflow-builder-v*.zip"))
             self.assertEqual(len(archives), 1)
             archive_path = archives[0]
 

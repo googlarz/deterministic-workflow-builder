@@ -1,8 +1,8 @@
 # Deterministic Workflow Builder
 
-[![CI](https://github.com/googlarz/deterministic-workflow-builder-skill/actions/workflows/python-matrix.yml/badge.svg)](https://github.com/googlarz/deterministic-workflow-builder-skill/actions/workflows/python-matrix.yml)
-[![Release](https://img.shields.io/github/v/release/googlarz/deterministic-workflow-builder-skill?display_name=tag)](https://github.com/googlarz/deterministic-workflow-builder-skill/releases)
-[![License](https://img.shields.io/github/license/googlarz/deterministic-workflow-builder-skill)](https://github.com/googlarz/deterministic-workflow-builder-skill/blob/main/LICENSE)
+[![CI](https://github.com/googlarz/deterministic-workflow-builder/actions/workflows/python-matrix.yml/badge.svg)](https://github.com/googlarz/deterministic-workflow-builder/actions/workflows/python-matrix.yml)
+[![Release](https://img.shields.io/github/v/release/googlarz/deterministic-workflow-builder?display_name=tag)](https://github.com/googlarz/deterministic-workflow-builder/releases)
+[![License](https://img.shields.io/github/license/googlarz/deterministic-workflow-builder)](https://github.com/googlarz/deterministic-workflow-builder/blob/main/LICENSE)
 
 Build deterministic, auditable, repeatable workflows for Codex and Claude.
 

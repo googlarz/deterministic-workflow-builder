@@ -81,7 +81,7 @@ def validate_required_paths(files: list[Path], root: Path) -> None:
 
 def build_archive(output_dir: Path) -> Path:
     version = read_version()
-    archive_path = output_dir / f"deterministic-workflow-builder-skill-v{version}.zip"
+    archive_path = output_dir / f"deterministic-workflow-builder-v{version}.zip"
     files = iter_files(SKILL_DIR)
     validate_required_paths(files, SKILL_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
