@@ -9,3 +9,7 @@ __pycache__/
 dist/
 build/
 artifacts/
+
+# pytest coverage
+.coverage
+htmlcov/

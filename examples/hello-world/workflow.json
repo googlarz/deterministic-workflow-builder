@@ -1,0 +1,118 @@
+{
+  "schema_version": 4,
+  "workflow_name": "hello-world",
+  "version": 1,
+  "goal": "Greet the user and verify the greeting was written.",
+  "policy_pack": "strict-prod",
+  "policy": {},
+  "working_directory": ".",
+  "inputs": [],
+  "outputs": [
+    {
+      "type": "file",
+      "path": "artifacts/02-verify.done",
+      "required": true,
+      "retention": {"days": 7}
+    }
+  ],
+  "graph": {
+    "execution_model": "dag"
+  },
+  "environment": {
+    "network_mode": "offline"
+  },
+  "tooling": {
+    "allowlisted_commands": ["bash", "cat", "echo", "grep", "mkdir", "touch"]
+  },
+  "migrations": {
+    "current_from": null
+  },
+  "failure_policy": {
+    "on_error": "stop",
+    "max_retries": 0
+  },
+  "audit": {
+    "enabled": true,
+    "directory": "audit/runs"
+  },
+  "residual_nondeterminism": ["none"],
+  "steps": [
+    {
+      "id": "01-greet",
+      "name": "greet",
+      "type": "shell",
+      "script": "steps/01-greet.sh",
+      "executor_config": {},
+      "commands": ["./steps/01-greet.sh"],
+      "success_gate": {
+        "type": "file_exists",
+        "path": "artifacts/01-greet.txt"
+      },
+      "gate_type": "artifact",
+      "validation_checks": [
+        {"type": "file_exists", "path": "artifacts/01-greet.txt"}
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 30,
+      "depends_on": [],
+      "consumes": [],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/01-greet.txt",
+          "required": true,
+          "min_size_bytes": 1,
+          "retention": {"days": 7}
+        }
+      ],
+      "rollback": {
+        "script": "steps/01-greet.rollback.sh",
+        "when": "manual",
+        "preconditions": ["artifacts/01-greet.txt"]
+      }
+    },
+    {
+      "id": "02-verify",
+      "name": "verify",
+      "type": "shell",
+      "script": "steps/02-verify.sh",
+      "executor_config": {},
+      "commands": ["./steps/02-verify.sh"],
+      "success_gate": {
+        "type": "file_exists",
+        "path": "artifacts/02-verify.done"
+      },
+      "gate_type": "artifact",
+      "validation_checks": [
+        {"type": "file_exists", "path": "artifacts/02-verify.done"}
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 30,
+      "depends_on": ["01-greet"],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/01-greet.txt",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/02-verify.done",
+          "required": true,
+          "min_size_bytes": 1,
+          "retention": {"days": 7}
+        }
+      ],
+      "rollback": {
+        "script": "steps/02-verify.rollback.sh",
+        "when": "manual",
+        "preconditions": ["artifacts/02-verify.done"]
+      }
+    }
+  ],
+  "sidecars": []
+}

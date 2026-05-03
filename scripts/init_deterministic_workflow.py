@@ -201,16 +201,22 @@ def build_runner(skill_home: Path | None = None) -> str:
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n\n"
         'ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n'
-        f'DEFAULT_SKILL_HOME="{resolved_skill_home}"\n'
+        "\n"
+        "# 1. Standard installed location (Codex/Claude Code skills directory)\n"
         'CODEX_SKILL_HOME="${CODEX_HOME:-$HOME/.codex}/skills/deterministic-workflow-builder"\n'
-        'if [[ ! -f "$CODEX_SKILL_HOME/scripts/run_workflow.py" ]]; then\n'
-        '  CODEX_SKILL_HOME="$DEFAULT_SKILL_HOME"\n'
-        "fi\n"
-        'if [[ ! -f "$CODEX_SKILL_HOME/scripts/run_workflow.py" ]]; then\n'
-        '  echo "ERROR: Cannot find run_workflow.py. Set CODEX_HOME or install the skill." >&2\n'
+        "# 2. Path recorded when this workflow was scaffolded (same-machine fallback)\n"
+        f'LOCAL_SKILL_HOME="{resolved_skill_home}"\n'
+        "\n"
+        'if [[ -f "$CODEX_SKILL_HOME/scripts/run_workflow.py" ]]; then\n'
+        '  exec python3 "$CODEX_SKILL_HOME/scripts/run_workflow.py" --workflow-dir "$ROOT_DIR" "$@"\n'
+        'elif [[ -f "$LOCAL_SKILL_HOME/scripts/run_workflow.py" ]]; then\n'
+        '  exec python3 "$LOCAL_SKILL_HOME/scripts/run_workflow.py" --workflow-dir "$ROOT_DIR" "$@"\n'
+        "else\n"
+        '  echo "ERROR: Cannot find run_workflow.py." >&2\n'
+        '  echo "  Install: cp -r <skill-dir> ~/.codex/skills/deterministic-workflow-builder" >&2\n'
+        '  echo "  Or run:  python3 <skill-dir>/scripts/run_workflow.py $(pwd)" >&2\n'
         "  exit 2\n"
         "fi\n"
-        'exec python3 "$CODEX_SKILL_HOME/scripts/run_workflow.py" --workflow-dir "$ROOT_DIR" "$@"\n'
     )
 
 

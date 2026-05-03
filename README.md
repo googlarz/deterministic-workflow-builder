@@ -1,6 +1,7 @@
 # Deterministic Workflow Builder
 
 [![CI](https://github.com/googlarz/deterministic-workflow-builder/actions/workflows/python-matrix.yml/badge.svg)](https://github.com/googlarz/deterministic-workflow-builder/actions/workflows/python-matrix.yml)
+[![Coverage](https://img.shields.io/badge/coverage-33%25-yellow)](https://github.com/googlarz/deterministic-workflow-builder/actions/workflows/python-matrix.yml)
 [![Release](https://img.shields.io/github/v/release/googlarz/deterministic-workflow-builder?display_name=tag)](https://github.com/googlarz/deterministic-workflow-builder/releases)
 [![License](https://img.shields.io/github/license/googlarz/deterministic-workflow-builder)](https://github.com/googlarz/deterministic-workflow-builder/blob/main/LICENSE)
 
@@ -26,6 +27,38 @@ Most agent workflows fail in production because runtime behavior is too implicit
 - state corruption is unrecoverable
 
 This skill pushes the opposite direction: deterministic runtime, explicit state, and observable evidence.
+
+## Prerequisites
+
+- **Python 3.9+** and **Bash** (macOS/Linux)
+- **Claude CLI** or **Anthropic SDK** — only needed for `type: "claude"` steps and `--generate` / `compile_workflow.py`; pure shell workflows work with no AI tooling at all
+
+## Try it now
+
+The fastest way to see it work is to run the included example:
+
+```bash
+git clone https://github.com/googlarz/deterministic-workflow-builder
+cd deterministic-workflow-builder
+
+# Preview the two-step hello-world workflow
+python3 scripts/run_workflow.py examples/hello-world --list
+python3 scripts/run_workflow.py examples/hello-world --dry-run
+
+# Run it
+python3 scripts/run_workflow.py examples/hello-world
+```
+
+Output:
+
+```
+  → running  01-greet
+  ✓ complete 01-greet  (0.0s)
+  → running  02-verify
+  ✓ complete 02-verify  (0.0s)
+```
+
+See [`examples/hello-world/`](./examples/hello-world/) for the full workflow with annotated `workflow.json`, step scripts, and rollback hooks.
 
 ## What It Builds
 
@@ -82,9 +115,6 @@ Every run automatically generates `workflow-graph.html` — an n8n-style interac
 ```bash
 # Generate or refresh the visualization without running the workflow
 python3 scripts/run_workflow.py <workflow-dir> --visualize
-
-# Or generate it directly
-python3 scripts/visualize_workflow.py --workflow-dir <workflow-dir>
 ```
 
 **Features:**
@@ -94,11 +124,8 @@ python3 scripts/visualize_workflow.py --workflow-dir <workflow-dir>
 - **GATE** badge on manual-approval steps
 - Sidecar AI advisor nodes anchored below their consumer
 - Click any node → inspector panel: type, status, script, dependencies, runtime metrics
-- Click empty canvas or press **Esc** to close inspector
 - **F** = fit-to-screen, **/** = search/filter, minimap, Export SVG
 - Progress bar: `N/total complete · M approvals`
-
-![Workflow Visualization](docs/visualization-preview.png)
 
 ## Repository Layout
 
@@ -111,80 +138,115 @@ deterministic-workflow-builder/
 ├── COMPATIBILITY.md
 ├── acceptance.md
 ├── assets/
-│   ├── policies/
-│   ├── prompts/
+│   ├── policies/          # strict-prod, ai-sidecar-safe, offline-only, …
+│   ├── prompts/           # pinned sidecar prompt assets
 │   └── sidecar-registry.json
-├── benchmarks/
+├── benchmarks/            # expected outputs for smoke-testing compile_workflow.py
+├── examples/
+│   └── hello-world/       # complete runnable two-step example
 ├── references/
-├── scripts/
-│   ├── compile_workflow.py
-│   ├── run_workflow.py
-│   ├── verify_workflow.py
-│   ├── security_audit.py
-│   ├── migrate_workflow.py
-│   └── ...
+├── scripts/               # all tooling — init, run, verify, audit, migrate, …
 └── tests/
 ```
 
 ## Quick Start
 
-Install the skill by copying this folder into `.codex/skills/` or by downloading a release zip and extracting the `deterministic-workflow-builder/` directory into your skills directory.
+**Option A — run the example (zero setup):**
 
-Create a scaffold:
+```bash
+python3 scripts/run_workflow.py examples/hello-world
+```
+
+**Option B — scaffold your own workflow:**
 
 ```bash
 python3 scripts/init_deterministic_workflow.py demo-flow --path . --steps collect,review,publish
 ```
 
-Compile from a natural-language request:
+This creates `./demo-flow/` with a `workflow.json`, stub step scripts in `steps/`, and a `WORKFLOW_SPEC.md`. The step scripts are stubs — they fail on purpose until you fill them in.
+
+Open `steps/01-collect.sh` and replace the placeholder body:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Your commands here. Example:
+git log --oneline -20 > "$ROOT_DIR/artifacts/01-collect.txt"
+
+# Every step must produce its declared artifact so the success gate passes.
+touch "$ROOT_DIR/artifacts/01-collect.done"
+```
+
+Also update `success_gate` in `workflow.json` for each step to match what the script actually produces. See [`examples/hello-world/`](./examples/hello-world/) for a complete working reference.
+
+Once the scripts are real:
+
+```bash
+python3 scripts/verify_workflow.py ./demo-flow --simulate
+python3 scripts/security_audit.py ./demo-flow
+python3 scripts/run_workflow.py ./demo-flow --dry-run
+python3 scripts/run_workflow.py ./demo-flow
+```
+
+**Option C — compile from natural language (requires Claude CLI):**
 
 ```bash
 python3 scripts/compile_workflow.py "Fix the failing CI test and make it deterministic." --path .
 ```
 
-Verify and inspect:
+This calls Claude to generate the full `workflow.json` and step scripts from the description.
+
+## Common Operations
 
 ```bash
-python3 scripts/verify_workflow.py ./demo-flow --simulate
-python3 scripts/security_audit.py ./demo-flow
-./demo-flow/run_workflow.sh --list
-./demo-flow/run_workflow.sh --doctor
-```
+# Inspect
+python3 scripts/run_workflow.py <workflow-dir> --list
+python3 scripts/run_workflow.py <workflow-dir> --dry-run
+python3 scripts/run_workflow.py <workflow-dir> --doctor
 
-Run and recover:
+# Run
+python3 scripts/run_workflow.py <workflow-dir>
+python3 scripts/run_workflow.py <workflow-dir> --step 02-review  # single step
 
-```bash
-./demo-flow/run_workflow.sh --dry-run
-./demo-flow/run_workflow.sh --approve 02-review --approval-reason "release checklist passed"
-./demo-flow/run_workflow.sh
-./demo-flow/run_workflow.sh --replay run-0001
-./demo-flow/run_workflow.sh --repair
+# Approvals
+python3 scripts/run_workflow.py <workflow-dir> --approve 02-review --approval-reason "checklist passed"
+
+# Recovery
+python3 scripts/run_workflow.py <workflow-dir> --repair
+python3 scripts/run_workflow.py <workflow-dir> --replay run-0001
+
+# Quality
+python3 scripts/lint_determinism.py <workflow-dir>
+python3 scripts/verify_workflow.py <workflow-dir> --simulate
+python3 scripts/security_audit.py <workflow-dir>
+python3 scripts/diff_workflows.py <workflow-dir-before> <workflow-dir-after>
+
+# Improvement
+python3 scripts/run_workflow.py <workflow-dir> --improve
+python3 scripts/auto_harden_workflow.py <workflow-dir> --write
 ```
 
 ## Testing
 
 ```bash
-python3 -m pip install "ruff>=0.14,<0.15" "pre-commit>=4.3,<5"
-ruff check scripts tests
-ruff format --check scripts tests
-python3 -m py_compile scripts/*.py
+python3 -m pip install "ruff>=0.14,<0.15" "pre-commit>=4.3,<5" pytest pytest-cov
+ruff check scripts tests && ruff format --check scripts tests
 python3 -m unittest discover -s tests -p 'test_*.py'
-python3 scripts/evaluate_benchmarks.py
-python3 scripts/security_audit.py <workflow-dir>
-python3 scripts/package_skill.py --output-dir dist
+python3 -m pytest --cov --cov-fail-under=33
 pre-commit run --all-files
 ```
 
 ## Release
-
-Cut a release by updating [VERSION](./VERSION), updating [CHANGELOG.md](./CHANGELOG.md), and pushing a matching git tag:
 
 ```bash
 git tag "v$(cat VERSION)"
 git push origin --tags
 ```
 
-The release workflow packages the skill, uploads the zip artifact, and publishes a GitHub release for matching `v*` tags.
+The release workflow packages the skill, uploads the zip artifact, and publishes a GitHub release.
 
 ## Intended Use
 
