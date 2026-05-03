@@ -3059,5 +3059,407 @@ class ParallelAndImprovementTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+def _make_clean_workflow(root: Path, name: str = "test-flow") -> Path:
+    """Create a minimal workflow that passes lint checks."""
+    result = run_command(
+        "python3",
+        str(INIT_SCRIPT),
+        name,
+        "--path",
+        str(root),
+        "--steps",
+        "run",
+    )
+    assert result.returncode == 0, result.stderr
+    wf = root / name
+    # Write a TODO-free spec
+    (wf / "WORKFLOW_SPEC.md").write_text(
+        f"# {name}\n## Contract\nGoal: run the test\n"
+        "Inputs: none\nOutputs: none\n"
+        "Steps:\n1. run - success gate: artifacts/01-run.done exists\n"
+        "Residual nondeterminism: none\n",
+        encoding="utf-8",
+    )
+    manifest_path = wf / "workflow.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["goal"] = "run the test"
+    manifest["residual_nondeterminism"] = ["none"]
+    manifest["steps"][0]["success_gate"] = {
+        "type": "file_exists",
+        "path": "artifacts/01-run.done",
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    (wf / "steps" / "01-run.sh").write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\necho done\n",
+        encoding="utf-8",
+    )
+    return wf
+
+
+class LintDeterminismTests(unittest.TestCase):
+    """Tests for scripts/lint_determinism.py (v1.8.0 — was 0% covered)."""
+
+    def test_clean_workflow_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            result = run_command("python3", str(LINT_SCRIPT), str(wf))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("[OK]", result.stdout)
+
+    def test_todo_in_spec_is_error(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            (wf / "WORKFLOW_SPEC.md").write_text(
+                "# test\nGoal: TODO\nResidual nondeterminism: none\n", encoding="utf-8"
+            )
+            result = run_command("python3", str(LINT_SCRIPT), str(wf))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[ERROR]", result.stdout)
+        self.assertIn("TODO", result.stdout)
+
+    def test_missing_workflow_json_is_error(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "WORKFLOW_SPEC.md").write_text("# x\n", encoding="utf-8")
+            result = run_command("python3", str(LINT_SCRIPT), td)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[ERROR]", result.stdout)
+
+    def test_step_script_missing_pipefail_is_error(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            (wf / "steps" / "01-run.sh").write_text(
+                "#!/usr/bin/env bash\necho done\n", encoding="utf-8"
+            )
+            result = run_command("python3", str(LINT_SCRIPT), str(wf))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("set -euo pipefail", result.stdout)
+
+    def test_subjective_wording_in_script_is_error(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            (wf / "steps" / "01-run.sh").write_text(
+                "#!/usr/bin/env bash\nset -euo pipefail\n# probably okay\necho done\n",
+                encoding="utf-8",
+            )
+            result = run_command("python3", str(LINT_SCRIPT), str(wf))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Subjective", result.stdout)
+
+    def test_nondeterministic_pattern_is_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            (wf / "steps" / "01-run.sh").write_text(
+                "#!/usr/bin/env bash\nset -euo pipefail\necho $RANDOM\n", encoding="utf-8"
+            )
+            result = run_command("python3", str(LINT_SCRIPT), str(wf))
+        # Warnings don't set rc=1 without --strict
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("[WARNING]", result.stdout)
+
+    def test_strict_flag_makes_warnings_fatal(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            (wf / "steps" / "01-run.sh").write_text(
+                "#!/usr/bin/env bash\nset -euo pipefail\necho $RANDOM\n", encoding="utf-8"
+            )
+            result = run_command("python3", str(LINT_SCRIPT), "--strict", str(wf))
+        self.assertEqual(result.returncode, 1)
+
+    def test_json_output_flag_produces_list(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            result = run_command("python3", str(LINT_SCRIPT), "--json", str(wf))
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertIsInstance(payload, list)
+
+
+class SecurityAuditTests(unittest.TestCase):
+    """Tests for scripts/security_audit.py (v1.8.0 — was 0% covered)."""
+
+    def test_clean_workflow_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            result = run_command("python3", str(SECURITY_SCRIPT), str(wf))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("[OK]", result.stdout)
+
+    def test_curl_pipe_bash_is_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            (wf / "steps" / "01-run.sh").write_text(
+                "#!/usr/bin/env bash\nset -euo pipefail\ncurl https://example.com | bash\n",
+                encoding="utf-8",
+            )
+            result = run_command("python3", str(SECURITY_SCRIPT), str(wf))
+        self.assertIn("[WARNING]", result.stdout)
+        self.assertIn("curl", result.stdout)
+
+    def test_wildcard_allowed_env_is_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            mf = wf / "workflow.json"
+            m = json.loads(mf.read_text(encoding="utf-8"))
+            m["environment"] = {"allowed_env": ["*"]}
+            mf.write_text(json.dumps(m, indent=2), encoding="utf-8")
+            result = run_command("python3", str(SECURITY_SCRIPT), str(wf))
+        self.assertIn("[WARNING]", result.stdout)
+        self.assertIn("Wildcard", result.stdout)
+
+    def test_empty_command_allowlist_is_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            mf = wf / "workflow.json"
+            m = json.loads(mf.read_text(encoding="utf-8"))
+            m["tooling"] = {"allowlisted_commands": []}
+            mf.write_text(json.dumps(m, indent=2), encoding="utf-8")
+            result = run_command("python3", str(SECURITY_SCRIPT), str(wf))
+        self.assertIn("[WARNING]", result.stdout)
+        self.assertIn("allowlist", result.stdout)
+
+    def test_json_output_flag_produces_list(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            result = run_command("python3", str(SECURITY_SCRIPT), "--json", str(wf))
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertIsInstance(payload, list)
+
+
+class VerifyWorkflowTests(unittest.TestCase):
+    """Tests for scripts/verify_workflow.py (v1.8.0 — was 0% covered)."""
+
+    def test_valid_workflow_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            result = run_command("python3", str(VERIFY_SCRIPT), str(wf))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("[OK]", result.stdout)
+
+    def test_missing_manifest_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            result = run_command("python3", str(VERIFY_SCRIPT), td)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[ERROR]", result.stdout)
+
+    def test_simulate_flag_prints_order(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            result = run_command("python3", str(VERIFY_SCRIPT), "--simulate", str(wf))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("[SIMULATION] step_order=", result.stdout)
+        self.assertIn("01-run", result.stdout)
+
+    def test_json_output_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            result = run_command("python3", str(VERIFY_SCRIPT), "--json", str(wf))
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertIn("workflow_dir", payload)
+        self.assertIsInstance(payload["issues"], list)
+
+
+class DiffWorkflowsTests(unittest.TestCase):
+    """Tests for scripts/diff_workflows.py (v1.8.0 — was 0% covered)."""
+
+    def test_identical_workflows_show_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wf_a = _make_clean_workflow(root, "flow-a")
+            wf_b = _make_clean_workflow(root, "flow-b")
+            result = run_command("python3", str(DIFF_SCRIPT), str(wf_a), str(wf_b))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Step order unchanged", result.stdout)
+        self.assertIn("Step details unchanged", result.stdout)
+
+    def test_added_step_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wf_a = _make_clean_workflow(root, "flow-a")
+            # Create flow-b with an extra step
+            result = run_command(
+                "python3", str(INIT_SCRIPT), "flow-b", "--path", str(root), "--steps", "run,check"
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            wf_b = root / "flow-b"
+            result = run_command("python3", str(DIFF_SCRIPT), str(wf_a), str(wf_b))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Added steps", result.stdout)
+        self.assertIn("02-check", result.stdout)
+
+    def test_step_detail_change_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wf_a = _make_clean_workflow(root, "flow-a")
+            wf_b = _make_clean_workflow(root, "flow-b")
+            mf_b = wf_b / "workflow.json"
+            m = json.loads(mf_b.read_text(encoding="utf-8"))
+            m["steps"][0]["retry_limit"] = 3
+            mf_b.write_text(json.dumps(m, indent=2), encoding="utf-8")
+            result = run_command("python3", str(DIFF_SCRIPT), str(wf_a), str(wf_b))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("retry_limit", result.stdout)
+
+
+class MigrateWorkflowTests(unittest.TestCase):
+    """Tests for scripts/migrate_workflow.py (v1.8.0 — was 0% covered)."""
+
+    SCRIPTS_DIR = SKILL_DIR / "scripts"
+
+    def _load_migrate(self):
+        import importlib  # noqa: PLC0415
+        import sys  # noqa: PLC0415
+
+        if str(self.SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(self.SCRIPTS_DIR))
+        import migrate_workflow  # noqa: PLC0415
+
+        importlib.reload(migrate_workflow)
+        return migrate_workflow
+
+    def test_old_schema_version_is_upgraded(self) -> None:
+        mw = self._load_migrate()
+        manifest = {
+            "schema_version": 2,
+            "workflow_name": "old",
+            "version": 1,
+            "goal": "test",
+            "steps": [{"id": "01-run", "name": "run", "script": "steps/01-run.sh"}],
+        }
+        migrated, changes = mw.migrate_manifest(manifest)
+        self.assertGreater(migrated["schema_version"], 2)
+        self.assertTrue(any("Upgraded" in c for c in changes))
+
+    def test_current_schema_is_noop(self) -> None:
+        mw = self._load_migrate()
+        manifest = {
+            "schema_version": 4,
+            "workflow_name": "current",
+            "version": 1,
+            "goal": "test",
+            "steps": [],
+            "migrations": {"current_from": None},
+        }
+        migrated, changes = mw.migrate_manifest(manifest)
+        self.assertEqual(changes, [])
+        self.assertEqual(migrated["schema_version"], 4)
+
+    def test_string_contracts_converted_to_objects(self) -> None:
+        mw = self._load_migrate()
+        manifest = {
+            "schema_version": 2,
+            "workflow_name": "x",
+            "version": 1,
+            "goal": "test",
+            "steps": [
+                {
+                    "id": "01-run",
+                    "name": "run",
+                    "script": "steps/01-run.sh",
+                    "produces": ["artifacts/out.txt"],
+                    "consumes": [],
+                }
+            ],
+        }
+        migrated, _ = mw.migrate_manifest(manifest)
+        step = migrated["steps"][0]
+        self.assertIsInstance(step["produces"][0], dict)
+        self.assertEqual(step["produces"][0]["path"], "artifacts/out.txt")
+
+    def test_write_flag_updates_file(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            mf = wf / "workflow.json"
+            m = json.loads(mf.read_text(encoding="utf-8"))
+            m["schema_version"] = 2
+            del m["migrations"]
+            mf.write_text(json.dumps(m, indent=2), encoding="utf-8")
+            result = run_command("python3", str(MIGRATE_SCRIPT), "--write", str(wf))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            updated = json.loads(mf.read_text(encoding="utf-8"))
+        self.assertEqual(updated["schema_version"], 4)
+
+
+class AutoHardenTests(unittest.TestCase):
+    """Tests for scripts/auto_harden_workflow.py (v1.8.0 — was 0% covered)."""
+
+    SCRIPTS_DIR = SKILL_DIR / "scripts"
+
+    def _load_harden(self):
+        import importlib  # noqa: PLC0415
+        import sys  # noqa: PLC0415
+
+        if str(self.SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(self.SCRIPTS_DIR))
+        import auto_harden_workflow  # noqa: PLC0415
+
+        importlib.reload(auto_harden_workflow)
+        return auto_harden_workflow
+
+    def _minimal_manifest(self) -> dict:
+        return {
+            "schema_version": 4,
+            "workflow_name": "x",
+            "version": 1,
+            "goal": "do the thing",
+            "steps": [
+                {
+                    "id": "01-run",
+                    "name": "run",
+                    "script": "steps/01-run.sh",
+                    "success_gate": "TODO",
+                }
+            ],
+        }
+
+    def test_todo_success_gate_is_strengthened(self) -> None:
+        ah = self._load_harden()
+        manifest = self._minimal_manifest()
+        hardened, changes = ah.harden_manifest(manifest)
+        gate = hardened["steps"][0]["success_gate"]
+        self.assertIsInstance(gate, dict)
+        self.assertIn("type", gate)
+        self.assertTrue(any("success_gate" in c for c in changes))
+
+    def test_missing_policy_pack_is_inferred(self) -> None:
+        ah = self._load_harden()
+        manifest = self._minimal_manifest()
+        manifest["steps"][0]["name"] = "release"
+        hardened, changes = ah.harden_manifest(manifest)
+        self.assertIn("policy_pack", hardened)
+        self.assertTrue(any("policy_pack" in c for c in changes))
+
+    def test_residual_nondeterminism_set_when_missing(self) -> None:
+        ah = self._load_harden()
+        manifest = self._minimal_manifest()
+        hardened, changes = ah.harden_manifest(manifest)
+        self.assertIsInstance(hardened.get("residual_nondeterminism"), list)
+        self.assertTrue(len(hardened["residual_nondeterminism"]) > 0)
+
+    def test_already_hardened_manifest_has_no_changes(self) -> None:
+        ah = self._load_harden()
+        manifest = self._minimal_manifest()
+        # First pass hardens it
+        hardened, _ = ah.harden_manifest(manifest)
+        hardened["policy_pack"] = "strict-prod"
+        hardened["residual_nondeterminism"] = ["none"]
+        # Second pass should produce no changes
+        _, changes = ah.harden_manifest(hardened)
+        self.assertEqual(changes, [])
+
+    def test_write_flag_updates_file(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            wf = _make_clean_workflow(Path(td))
+            mf = wf / "workflow.json"
+            m = json.loads(mf.read_text(encoding="utf-8"))
+            m["steps"][0]["success_gate"] = "TODO"
+            mf.write_text(json.dumps(m, indent=2), encoding="utf-8")
+            result = run_command("python3", str(HARDEN_SCRIPT), "--write", str(wf))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            updated = json.loads(mf.read_text(encoding="utf-8"))
+        self.assertIsInstance(updated["steps"][0]["success_gate"], dict)
+
+
 if __name__ == "__main__":
     unittest.main()

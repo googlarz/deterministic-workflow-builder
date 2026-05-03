@@ -1,3 +1,26 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["scripts"]
+# subprocess-invoked scripts are excluded from the import-level threshold;
+# they are still exercised via integration tests but cannot be measured without
+# subprocess-aware tracing.
+omit = [
+    "scripts/diff_workflows.py",
+    "scripts/evaluate_benchmarks.py",
+    "scripts/lint_determinism.py",
+    "scripts/live_dashboard.py",
+    "scripts/package_skill.py",
+    "scripts/security_audit.py",
+    "scripts/verify_workflow.py",
+]
+
+[tool.coverage.report]
+fail_under = 33
+show_missing = false
+skip_covered = false
+
 [tool.ruff]
 target-version = "py39"
 line-length = 100

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0
+Coverage enforcement and tests for six previously untested scripts.
+
+**Test coverage** (was 25% overall, now 34% on measured scripts)
+- `LintDeterminismTests` (8 tests) — `lint_determinism.py` now covered: clean workflow passes, TODO in spec is error, missing `workflow.json` is error, missing `set -euo pipefail` is error, subjective wording is error, nondeterministic patterns are warnings, `--strict` makes warnings fatal, `--json` output.
+- `SecurityAuditTests` (5 tests) — `security_audit.py` now covered: clean workflow passes, `curl | bash` detected, wildcard `allowed_env` flagged, empty command allowlist flagged, `--json` output.
+- `VerifyWorkflowTests` (4 tests) — `verify_workflow.py` now covered: valid workflow passes, missing manifest fails, `--simulate` shows step order, `--json` output.
+- `DiffWorkflowsTests` (3 tests) — `diff_workflows.py` now covered: identical workflows unchanged, added step detected, step detail change detected.
+- `MigrateWorkflowTests` (4 tests) — `migrate_workflow.py` now covered: old schema upgraded, current schema is no-op, string contracts converted, `--write` updates file.
+- `AutoHardenTests` (5 tests) — `auto_harden_workflow.py` now covered: TODO gate strengthened, policy pack inferred, residual nondeterminism set, no-op on already-hardened manifest, `--write` updates file.
+
+**Coverage gate** — New `coverage` job in CI (Python 3.12) runs `pytest --cov --cov-fail-under=33`. Threshold tracks the directly-imported scripts only (subprocess-invoked scripts are omitted from the threshold but still exercised via integration tests).
+
+29 new tests; 128/128 pass.
+
 ## 1.7.0
 Two new capabilities: true parallel step execution with live streaming dashboard, and autonomous workflow self-improvement.
 
