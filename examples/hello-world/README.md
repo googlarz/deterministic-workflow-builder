@@ -2,7 +2,7 @@
 
 The simplest complete example: two steps, no AI, no approvals, no external dependencies.
 
-**Step 1 — greet:** writes a greeting to `artifacts/01-greet.txt`.  
+**Step 1 — greet:** writes a greeting to `artifacts/01-greet.txt`.
 **Step 2 — verify:** reads that artifact and checks it contains the expected text.
 
 ## Run it
