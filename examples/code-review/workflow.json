@@ -1,0 +1,223 @@
+{
+  "schema_version": 4,
+  "workflow_name": "code-review",
+  "version": 1,
+  "goal": "Perform a deterministic code review with static analysis, human approval gate, and controlled merge.",
+  "policy_pack": "human-approval-heavy",
+  "policy": {},
+  "working_directory": ".",
+  "inputs": [
+    "artifacts/diff.patch"
+  ],
+  "outputs": [
+    "artifacts/04-merge.done"
+  ],
+  "graph": {
+    "execution_model": "dag"
+  },
+  "environment": {
+    "network_mode": "inherit"
+  },
+  "tooling": {
+    "allowlisted_commands": [
+      "bash",
+      "cat",
+      "cp",
+      "echo",
+      "find",
+      "git",
+      "grep",
+      "jq",
+      "mkdir",
+      "mv",
+      "python3",
+      "rm",
+      "sed",
+      "sort",
+      "touch",
+      "xargs"
+    ]
+  },
+  "migrations": {
+    "current_from": null
+  },
+  "failure_policy": {
+    "on_error": "stop",
+    "max_retries": 0
+  },
+  "audit": {
+    "enabled": true,
+    "directory": "audit/runs"
+  },
+  "residual_nondeterminism": [
+    "Human reviewer judgment at approval gate"
+  ],
+  "steps": [
+    {
+      "id": "01-collect",
+      "name": "Gather diff",
+      "type": "shell",
+      "script": "steps/01-collect.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/01-collect.sh"
+      ],
+      "success_gate": "file exists artifacts/diff.patch",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/diff.patch"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 120,
+      "depends_on": [],
+      "consumes": [],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/diff.patch",
+          "required": true,
+          "min_size_bytes": 1,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "02-analyse",
+      "name": "Static analysis",
+      "type": "shell",
+      "script": "steps/02-analyse.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/02-analyse.sh"
+      ],
+      "success_gate": "file exists artifacts/analysis-report.txt",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/analysis-report.txt"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 300,
+      "depends_on": [
+        "01-collect"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/diff.patch",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/analysis-report.txt",
+          "required": true,
+          "min_size_bytes": 1,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "03-review",
+      "name": "Human approval gate",
+      "type": "approval",
+      "script": "steps/03-review.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/03-review.sh"
+      ],
+      "success_gate": "file exists artifacts/03-review.done",
+      "gate_type": "approval",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/03-review.done"
+        }
+      ],
+      "requires_approval": true,
+      "retry_limit": 0,
+      "timeout_seconds": 86400,
+      "depends_on": [
+        "02-analyse"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/analysis-report.txt",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/03-review.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "04-merge",
+      "name": "Apply merge",
+      "type": "shell",
+      "script": "steps/04-merge.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/04-merge.sh"
+      ],
+      "success_gate": "file exists artifacts/04-merge.done",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/04-merge.done"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 120,
+      "depends_on": [
+        "03-review"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/03-review.done",
+          "required": true
+        },
+        {
+          "type": "file",
+          "path": "artifacts/diff.patch",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/04-merge.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    }
+  ],
+  "sidecars": []
+}

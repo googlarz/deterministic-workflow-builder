@@ -1,0 +1,250 @@
+{
+  "schema_version": 4,
+  "workflow_name": "release-checklist",
+  "version": 1,
+  "goal": "Ship a release safely: preflight checks, changelog verification, human approval, tag, and post-release smoke test.",
+  "policy_pack": "strict-prod",
+  "policy": {},
+  "working_directory": ".",
+  "inputs": [],
+  "outputs": [
+    "artifacts/05-verify.done"
+  ],
+  "graph": {
+    "execution_model": "dag"
+  },
+  "environment": {
+    "network_mode": "inherit"
+  },
+  "tooling": {
+    "allowlisted_commands": [
+      "bash",
+      "cat",
+      "cp",
+      "echo",
+      "find",
+      "git",
+      "grep",
+      "jq",
+      "mkdir",
+      "mv",
+      "python3",
+      "rm",
+      "sed",
+      "sort",
+      "touch",
+      "xargs"
+    ]
+  },
+  "migrations": {
+    "current_from": null
+  },
+  "failure_policy": {
+    "on_error": "stop",
+    "max_retries": 0
+  },
+  "audit": {
+    "enabled": true,
+    "directory": "audit/runs"
+  },
+  "residual_nondeterminism": [
+    "Human approval judgment at the release gate"
+  ],
+  "steps": [
+    {
+      "id": "01-preflight",
+      "name": "Preflight checks",
+      "type": "shell",
+      "script": "steps/01-preflight.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/01-preflight.sh"
+      ],
+      "success_gate": "file exists artifacts/01-preflight.done",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/01-preflight.done"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 300,
+      "depends_on": [],
+      "consumes": [],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/01-preflight.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "02-changelog",
+      "name": "Verify CHANGELOG",
+      "type": "shell",
+      "script": "steps/02-changelog.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/02-changelog.sh"
+      ],
+      "success_gate": "file exists artifacts/02-changelog.done",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/02-changelog.done"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 120,
+      "depends_on": [
+        "01-preflight"
+      ],
+      "consumes": [],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/02-changelog.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "03-approve",
+      "name": "Release approval gate",
+      "type": "approval",
+      "script": "steps/03-approve.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/03-approve.sh"
+      ],
+      "success_gate": "file exists artifacts/03-approve.done",
+      "gate_type": "approval",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/03-approve.done"
+        }
+      ],
+      "requires_approval": true,
+      "retry_limit": 0,
+      "timeout_seconds": 86400,
+      "depends_on": [
+        "02-changelog"
+      ],
+      "consumes": [],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/03-approve.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "04-tag",
+      "name": "Git tag release",
+      "type": "shell",
+      "script": "steps/04-tag.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/04-tag.sh"
+      ],
+      "success_gate": "file exists artifacts/04-tag.done",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/04-tag.done"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 120,
+      "depends_on": [
+        "03-approve"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/03-approve.done",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/04-tag.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "05-verify",
+      "name": "Post-release smoke test",
+      "type": "test",
+      "script": "steps/05-verify.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/05-verify.sh"
+      ],
+      "success_gate": "file exists artifacts/05-verify.done",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/05-verify.done"
+        },
+        {
+          "type": "log_contains",
+          "value": "smoke test passed"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 1,
+      "timeout_seconds": 300,
+      "depends_on": [
+        "04-tag"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/04-tag.done",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/05-verify.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 90
+          }
+        }
+      ]
+    }
+  ],
+  "sidecars": []
+}

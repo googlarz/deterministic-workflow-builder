@@ -149,6 +149,12 @@ deterministic-workflow-builder/
 └── tests/
 ```
 
+## Prerequisites
+
+- Python 3.9+ (no additional dependencies required)
+- `compile_workflow.py` works with Python alone — no Claude CLI needed
+- Claude CLI is only required at runtime for workflow steps with `"type": "claude"`
+
 ## Quick Start
 
 **Option A — run the example (zero setup):**

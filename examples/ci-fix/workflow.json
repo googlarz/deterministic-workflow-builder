@@ -1,0 +1,264 @@
+{
+  "schema_version": 4,
+  "workflow_name": "ci-fix",
+  "version": 1,
+  "goal": "Fix a failing CI test deterministically by reproducing locally, generating candidates, applying the best fix, and verifying the suite.",
+  "policy_pack": "ai-sidecar-safe",
+  "policy": {},
+  "working_directory": ".",
+  "inputs": [
+    "artifacts/failing-test-output.txt"
+  ],
+  "outputs": [
+    "artifacts/05-test.done"
+  ],
+  "graph": {
+    "execution_model": "dag"
+  },
+  "environment": {
+    "network_mode": "inherit"
+  },
+  "tooling": {
+    "allowlisted_commands": [
+      "bash",
+      "cat",
+      "cp",
+      "echo",
+      "find",
+      "git",
+      "grep",
+      "jq",
+      "mkdir",
+      "mv",
+      "python3",
+      "rm",
+      "sed",
+      "sort",
+      "touch",
+      "xargs"
+    ]
+  },
+  "migrations": {
+    "current_from": null
+  },
+  "failure_policy": {
+    "on_error": "stop",
+    "max_retries": 1
+  },
+  "audit": {
+    "enabled": true,
+    "directory": "audit/runs"
+  },
+  "residual_nondeterminism": [
+    "Network state during test execution may vary"
+  ],
+  "steps": [
+    {
+      "id": "01-collect",
+      "name": "Collect failing test output",
+      "type": "shell",
+      "script": "steps/01-collect.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/01-collect.sh"
+      ],
+      "success_gate": "file exists artifacts/failing-test-output.txt",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/failing-test-output.txt"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 300,
+      "depends_on": [],
+      "consumes": [],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/failing-test-output.txt",
+          "required": true,
+          "min_size_bytes": 1,
+          "retention": {
+            "days": 30
+          }
+        }
+      ]
+    },
+    {
+      "id": "02-reproduce",
+      "name": "Reproduce failure locally",
+      "type": "shell",
+      "script": "steps/02-reproduce.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/02-reproduce.sh"
+      ],
+      "success_gate": "file exists artifacts/02-reproduce.done",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/02-reproduce.done"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 1,
+      "timeout_seconds": 600,
+      "depends_on": [
+        "01-collect"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/failing-test-output.txt",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/02-reproduce.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 30
+          }
+        }
+      ]
+    },
+    {
+      "id": "03-candidate-fixes",
+      "name": "Write fix candidates",
+      "type": "shell",
+      "script": "steps/03-candidate-fixes.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/03-candidate-fixes.sh"
+      ],
+      "success_gate": "file exists artifacts/fix-candidates.txt",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/fix-candidates.txt"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 300,
+      "depends_on": [
+        "02-reproduce"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/failing-test-output.txt",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/fix-candidates.txt",
+          "required": true,
+          "min_size_bytes": 1,
+          "retention": {
+            "days": 30
+          }
+        }
+      ]
+    },
+    {
+      "id": "04-apply",
+      "name": "Apply best fix candidate",
+      "type": "shell",
+      "script": "steps/04-apply.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/04-apply.sh"
+      ],
+      "success_gate": "file exists artifacts/04-apply.done",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/04-apply.done"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 0,
+      "timeout_seconds": 120,
+      "depends_on": [
+        "03-candidate-fixes"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/fix-candidates.txt",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/04-apply.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 30
+          }
+        }
+      ]
+    },
+    {
+      "id": "05-test",
+      "name": "Run test suite",
+      "type": "test",
+      "script": "steps/05-test.sh",
+      "executor_config": {},
+      "commands": [
+        "./steps/05-test.sh"
+      ],
+      "success_gate": "file exists artifacts/05-test.done",
+      "gate_type": "artifact",
+      "validation_checks": [
+        {
+          "type": "file_exists",
+          "path": "artifacts/05-test.done"
+        },
+        {
+          "type": "log_contains",
+          "value": "PASSED"
+        }
+      ],
+      "requires_approval": false,
+      "retry_limit": 1,
+      "timeout_seconds": 900,
+      "depends_on": [
+        "04-apply"
+      ],
+      "consumes": [
+        {
+          "type": "file",
+          "path": "artifacts/04-apply.done",
+          "required": true
+        }
+      ],
+      "produces": [
+        {
+          "type": "file",
+          "path": "artifacts/05-test.done",
+          "required": true,
+          "min_size_bytes": 0,
+          "retention": {
+            "days": 30
+          }
+        }
+      ]
+    }
+  ],
+  "sidecars": []
+}

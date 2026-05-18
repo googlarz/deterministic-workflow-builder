@@ -1,0 +1,22 @@
+name: Run Deterministic Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_dir:
+        description: 'Path to workflow directory (relative to repo root)'
+        required: true
+        default: 'examples/ci-fix'
+
+jobs:
+  run-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run deterministic workflow (dry run)
+        run: python3 scripts/run_workflow.py ${{ inputs.workflow_dir }} --dry-run --list
+      - name: Run deterministic workflow
+        run: python3 scripts/run_workflow.py ${{ inputs.workflow_dir }}
