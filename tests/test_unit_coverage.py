@@ -13,6 +13,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import run_workflow  # noqa: E402
+import approval_notifier  # noqa: E402
 import workflow_schema  # noqa: E402
 import security_audit  # noqa: E402
 import lint_determinism  # noqa: E402
@@ -938,6 +939,176 @@ class TestScanTodos(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # lint_determinism — resolve_workflow_dir
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# approval_notifier — pure functions
+# ---------------------------------------------------------------------------
+
+class TestApprovalNotifierReadTsv(unittest.TestCase):
+    def test_missing_file(self):
+        result = approval_notifier.read_tsv(Path("/nonexistent/file.tsv"))
+        self.assertEqual(result, {})
+
+    def test_valid_tsv(self):
+        with tempfile.NamedTemporaryFile(suffix=".tsv", delete=False, mode="w") as fh:
+            fh.write("01-collect\tdone\n02-run\tpending\n")
+            path = Path(fh.name)
+        result = approval_notifier.read_tsv(path)
+        self.assertEqual(result["01-collect"], "done")
+        path.unlink()
+
+    def test_line_without_tab_skipped(self):
+        with tempfile.NamedTemporaryFile(suffix=".tsv", delete=False, mode="w") as fh:
+            fh.write("no-tab-line\n01-run\tpending\n")
+            path = Path(fh.name)
+        result = approval_notifier.read_tsv(path)
+        self.assertEqual(list(result.keys()), ["01-run"])
+        path.unlink()
+
+
+class TestApprovalNotifierLoadManifest(unittest.TestCase):
+    def test_loads_valid_manifest(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wdir = Path(tmpdir)
+            manifest = {"workflow_name": "test", "steps": []}
+            (wdir / "workflow.json").write_text(json.dumps(manifest), encoding="utf-8")
+            result = approval_notifier.load_manifest(wdir)
+            self.assertEqual(result["workflow_name"], "test")
+
+    def test_missing_manifest_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(FileNotFoundError):
+                approval_notifier.load_manifest(Path(tmpdir))
+
+
+class TestApprovalNotifierFindPending(unittest.TestCase):
+    def _setup_workflow(self, tmpdir, step_statuses=None):
+        wdir = Path(tmpdir)
+        manifest = {
+            "workflow_name": "test-wf",
+            "steps": [
+                {"id": "01-run", "name": "Run", "requires_approval": False},
+                {"id": "02-gate", "name": "Gate", "requires_approval": True},
+            ],
+        }
+        (wdir / "workflow.json").write_text(json.dumps(manifest), encoding="utf-8")
+        state_dir = wdir / "state"
+        state_dir.mkdir(exist_ok=True)
+        if step_statuses:
+            lines = "".join(f"{k}\t{v}\n" for k, v in step_statuses.items())
+            (state_dir / "step-status.tsv").write_text(lines, encoding="utf-8")
+        return wdir, manifest
+
+    def test_no_state_file_returns_pending_approval_steps(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wdir, manifest = self._setup_workflow(tmpdir)
+            pending = approval_notifier.find_pending_approvals(wdir, manifest)
+            # 02-gate has requires_approval=True and status defaults to "pending"
+            self.assertTrue(any(p["step_id"] == "02-gate" for p in pending))
+
+    def test_pending_approval_status(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wdir, manifest = self._setup_workflow(tmpdir, {
+                "01-run": "done",
+                "02-gate": "pending-approval",
+            })
+            pending = approval_notifier.find_pending_approvals(wdir, manifest)
+            self.assertTrue(any(p["step_id"] == "02-gate" for p in pending))
+
+    def test_all_done_returns_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wdir, manifest = self._setup_workflow(tmpdir, {
+                "01-run": "done",
+                "02-gate": "done",
+            })
+            pending = approval_notifier.find_pending_approvals(wdir, manifest)
+            self.assertEqual(pending, [])
+
+
+class TestApprovalNotifierBuildPayloads(unittest.TestCase):
+    def _manifest(self):
+        return {"workflow_name": "my-wf", "steps": []}
+
+    def _pending(self):
+        return [{
+            "step_id": "03-review",
+            "step_name": "Review",
+            "requires_approval": True,
+            "approve_command": "python3 scripts/run_workflow.py . --approve 03-review",
+        }]
+
+    def test_generic_payload_structure(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload = approval_notifier.build_generic_payload(
+                Path(tmpdir), self._manifest(), self._pending()
+            )
+            self.assertEqual(payload["workflow_name"], "my-wf")
+            self.assertEqual(len(payload["pending_approvals"]), 1)
+            self.assertIn("timestamp", payload)
+
+    def test_slack_payload_has_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload = approval_notifier.build_slack_payload(
+                Path(tmpdir), self._manifest(), self._pending()
+            )
+            self.assertIn("blocks", payload)
+            self.assertTrue(len(payload["blocks"]) > 0)
+
+    def test_utc_now_returns_string(self):
+        result = approval_notifier.utc_now()
+        self.assertIsInstance(result, str)
+        self.assertIn("T", result)
+
+
+class TestApprovalNotifierRunOnceDryRun(unittest.TestCase):
+    def test_dry_run_no_crash(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wdir = Path(tmpdir)
+            manifest = {
+                "workflow_name": "test",
+                "steps": [{"id": "01-run", "name": "Run", "requires_approval": True}],
+            }
+            (wdir / "workflow.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+            args = approval_notifier.parse_args([str(wdir), "--dry-run"])
+            import io, contextlib
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = approval_notifier.run_once(args)
+            output = buf.getvalue()
+            self.assertIn("Dry run", output)
+
+    def test_no_pending_returns_0(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wdir = Path(tmpdir)
+            manifest = {
+                "workflow_name": "test",
+                "steps": [{"id": "01-run", "name": "Run", "requires_approval": False}],
+            }
+            (wdir / "workflow.json").write_text(json.dumps(manifest), encoding="utf-8")
+            state_dir = wdir / "state"
+            state_dir.mkdir()
+            (state_dir / "step-status.tsv").write_text("01-run\tdone\n", encoding="utf-8")
+
+            args = approval_notifier.parse_args([str(wdir), "--dry-run"])
+            rc = approval_notifier.run_once(args)
+            self.assertEqual(rc, 0)
+
+    def test_no_url_no_dryrun_returns_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wdir = Path(tmpdir)
+            manifest = {
+                "workflow_name": "test",
+                "steps": [{"id": "01-run", "name": "Run", "requires_approval": True}],
+            }
+            (wdir / "workflow.json").write_text(json.dumps(manifest), encoding="utf-8")
+            args = approval_notifier.parse_args([str(wdir)])
+            import io, contextlib
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                rc = approval_notifier.run_once(args)
+            self.assertEqual(rc, 1)
+
 
 class TestLintResolveWorkflowDir(unittest.TestCase):
     def test_directory_returns_itself(self):
