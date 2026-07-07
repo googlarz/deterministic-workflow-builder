@@ -12,16 +12,16 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-import run_workflow  # noqa: E402
 import approval_notifier  # noqa: E402
-import workflow_schema  # noqa: E402
-import security_audit  # noqa: E402
 import lint_determinism  # noqa: E402
-
+import run_workflow  # noqa: E402
+import security_audit  # noqa: E402
+import workflow_schema  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # run_workflow — deep_merge
 # ---------------------------------------------------------------------------
+
 
 class TestDeepMerge(unittest.TestCase):
     def test_flat_override(self):
@@ -54,6 +54,7 @@ class TestDeepMerge(unittest.TestCase):
 # run_workflow — redact_text
 # ---------------------------------------------------------------------------
 
+
 class TestRedactText(unittest.TestCase):
     def test_redacts_secret(self):
         result = run_workflow.redact_text("secret=abc123")
@@ -80,6 +81,7 @@ class TestRedactText(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # run_workflow — parse_success_gate
 # ---------------------------------------------------------------------------
+
 
 class TestParseSuccessGate(unittest.TestCase):
     def test_dict_passthrough(self):
@@ -125,6 +127,7 @@ class TestParseSuccessGate(unittest.TestCase):
 # run_workflow — normalize_contracts
 # ---------------------------------------------------------------------------
 
+
 class TestNormalizeContracts(unittest.TestCase):
     def test_string_entries(self):
         result = run_workflow.normalize_contracts(["artifacts/out.txt"])
@@ -151,6 +154,7 @@ class TestNormalizeContracts(unittest.TestCase):
 # run_workflow — resolve_safe_path
 # ---------------------------------------------------------------------------
 
+
 class TestResolveSafePath(unittest.TestCase):
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp()).resolve()
@@ -171,6 +175,7 @@ class TestResolveSafePath(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # run_workflow — audit_enabled
 # ---------------------------------------------------------------------------
+
 
 class TestAuditEnabled(unittest.TestCase):
     def test_default_enabled(self):
@@ -194,9 +199,12 @@ class TestAuditEnabled(unittest.TestCase):
 # run_workflow — get_steps_by_id
 # ---------------------------------------------------------------------------
 
+
 class TestGetStepsById(unittest.TestCase):
     def test_returns_dict(self):
-        manifest = {"steps": [{"id": "01-collect", "name": "collect"}, {"id": "02-run", "name": "run"}]}
+        manifest = {
+            "steps": [{"id": "01-collect", "name": "collect"}, {"id": "02-run", "name": "run"}]
+        }
         result = run_workflow.get_steps_by_id(manifest)
         self.assertIn("01-collect", result)
         self.assertIn("02-run", result)
@@ -209,6 +217,7 @@ class TestGetStepsById(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # run_workflow — sha256_file
 # ---------------------------------------------------------------------------
+
 
 class TestSha256File(unittest.TestCase):
     def test_known_hash(self):
@@ -223,6 +232,7 @@ class TestSha256File(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # run_workflow — build_paths
 # ---------------------------------------------------------------------------
+
 
 class TestBuildPaths(unittest.TestCase):
     def test_paths_structure(self):
@@ -240,6 +250,7 @@ class TestBuildPaths(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # run_workflow — read_tsv_state / write_tsv_state
 # ---------------------------------------------------------------------------
+
 
 class TestTsvStateRoundtrip(unittest.TestCase):
     def test_round_trip(self):
@@ -266,6 +277,7 @@ class TestTsvStateRoundtrip(unittest.TestCase):
 # run_workflow — atomic_write_text
 # ---------------------------------------------------------------------------
 
+
 class TestAtomicWriteText(unittest.TestCase):
     def test_write_and_read(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -284,6 +296,7 @@ class TestAtomicWriteText(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # workflow_schema — normalize_contract
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeContract(unittest.TestCase):
     def test_string_becomes_file(self):
@@ -310,6 +323,7 @@ class TestNormalizeContract(unittest.TestCase):
 # workflow_schema — simulate_step_order
 # ---------------------------------------------------------------------------
 
+
 class TestSimulateStepOrder(unittest.TestCase):
     def _manifest(self, steps, execution_model="dag", schema_version=4):
         return {
@@ -334,7 +348,9 @@ class TestSimulateStepOrder(unittest.TestCase):
 
     def test_sequence_model_returns_declaration_order(self):
         steps = [{"id": "a", "depends_on": ["b"]}, {"id": "b", "depends_on": []}]
-        result = workflow_schema.simulate_step_order(self._manifest(steps, execution_model="sequence"))
+        result = workflow_schema.simulate_step_order(
+            self._manifest(steps, execution_model="sequence")
+        )
         self.assertEqual(result, ["a", "b"])
 
     def test_schema_v2_returns_declaration_order(self):
@@ -343,13 +359,16 @@ class TestSimulateStepOrder(unittest.TestCase):
         self.assertEqual(result, ["b", "a"])
 
     def test_empty_manifest(self):
-        result = workflow_schema.simulate_step_order({"steps": [], "graph": {"execution_model": "dag"}})
+        result = workflow_schema.simulate_step_order(
+            {"steps": [], "graph": {"execution_model": "dag"}}
+        )
         self.assertEqual(result, [])
 
 
 # ---------------------------------------------------------------------------
 # security_audit — collect_manifest_findings
 # ---------------------------------------------------------------------------
+
 
 class TestCollectManifestFindings(unittest.TestCase):
     def test_wildcard_env_warning(self):
@@ -376,6 +395,7 @@ class TestCollectManifestFindings(unittest.TestCase):
 # security_audit — collect_script_findings
 # ---------------------------------------------------------------------------
 
+
 class TestCollectScriptFindings(unittest.TestCase):
     def test_detects_eval(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -397,6 +417,7 @@ class TestCollectScriptFindings(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # lint_determinism — scan_step_script
 # ---------------------------------------------------------------------------
+
 
 class TestScanStepScript(unittest.TestCase):
     def test_missing_pipefail(self):
@@ -436,6 +457,7 @@ class TestScanStepScript(unittest.TestCase):
 # lint_determinism — add_finding helper
 # ---------------------------------------------------------------------------
 
+
 class TestAddFinding(unittest.TestCase):
     def test_adds_finding(self):
         findings: list[lint_determinism.Finding] = []
@@ -449,6 +471,7 @@ class TestAddFinding(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # workflow_schema — validate_manifest (full manifest)
 # ---------------------------------------------------------------------------
+
 
 def _minimal_valid_manifest(tmpdir: Path) -> dict:
     """Return a minimal schema v4 manifest that passes validate_manifest."""
@@ -534,7 +557,9 @@ class TestValidateManifestFull(unittest.TestCase):
     def test_duplicate_step_id(self):
         manifest = _minimal_valid_manifest(self.tmpdir)
         step = {
-            "id": "01-a", "name": "a", "type": "shell",
+            "id": "01-a",
+            "name": "a",
+            "type": "shell",
             "success_gate": "file exists artifacts/a.done",
             "gate_type": "artifact",
             "requires_approval": False,
@@ -567,7 +592,9 @@ class TestValidateManifestFull(unittest.TestCase):
     def test_depends_on_unknown_step(self):
         manifest = _minimal_valid_manifest(self.tmpdir)
         step = {
-            "id": "01-a", "name": "a", "type": "shell",
+            "id": "01-a",
+            "name": "a",
+            "type": "shell",
             "success_gate": "file exists artifacts/a.done",
             "gate_type": "artifact",
             "requires_approval": False,
@@ -588,7 +615,9 @@ class TestValidateManifestFull(unittest.TestCase):
     def test_invalid_contract_in_produces(self):
         manifest = _minimal_valid_manifest(self.tmpdir)
         step = {
-            "id": "01-a", "name": "a", "type": "shell",
+            "id": "01-a",
+            "name": "a",
+            "type": "shell",
             "success_gate": "file exists artifacts/a.done",
             "gate_type": "artifact",
             "requires_approval": False,
@@ -610,6 +639,7 @@ class TestValidateManifestFull(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # workflow_schema — summarize_sidecars
 # ---------------------------------------------------------------------------
+
 
 class TestSummarizeSidecars(unittest.TestCase):
     def test_empty_sidecars(self):
@@ -643,6 +673,7 @@ class TestSummarizeSidecars(unittest.TestCase):
 # run_workflow — utc_now, print_table, should_require_approval
 # ---------------------------------------------------------------------------
 
+
 class TestUtcNow(unittest.TestCase):
     def test_returns_string(self):
         result = run_workflow.utc_now()
@@ -652,7 +683,9 @@ class TestUtcNow(unittest.TestCase):
 
 class TestPrintTable(unittest.TestCase):
     def test_no_crash(self):
-        import io, contextlib
+        import contextlib
+        import io
+
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             run_workflow.print_table(["col1", "col2"], [["a", "b"], ["cc", "dd"]])
@@ -680,6 +713,7 @@ class TestShouldRequireApproval(unittest.TestCase):
 # run_workflow — load_policy
 # ---------------------------------------------------------------------------
 
+
 class TestLoadPolicy(unittest.TestCase):
     def test_loads_existing_policy(self):
         skill_dir = Path(__file__).resolve().parents[1]
@@ -696,6 +730,7 @@ class TestLoadPolicy(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # run_workflow — read_json_file helpers
 # ---------------------------------------------------------------------------
+
 
 class TestReadJsonFile(unittest.TestCase):
     def test_valid_json_file(self):
@@ -723,6 +758,7 @@ class TestReadJsonFile(unittest.TestCase):
 # run_workflow — append_jsonl, append_text
 # ---------------------------------------------------------------------------
 
+
 class TestAppendHelpers(unittest.TestCase):
     def test_append_jsonl(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -747,6 +783,7 @@ class TestAppendHelpers(unittest.TestCase):
 # run_workflow — summarize_policy
 # ---------------------------------------------------------------------------
 
+
 class TestSummarizePolicy(unittest.TestCase):
     def test_deep_copy(self):
         policy = {"audit": {"enabled": True}, "approval": {"required_for": ["shell"]}}
@@ -761,6 +798,7 @@ class TestSummarizePolicy(unittest.TestCase):
 # run_workflow — atomic_write_json
 # ---------------------------------------------------------------------------
 
+
 class TestAtomicWriteJson(unittest.TestCase):
     def test_writes_valid_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -774,6 +812,7 @@ class TestAtomicWriteJson(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # run_workflow — read_tsv_state_with_errors
 # ---------------------------------------------------------------------------
+
 
 class TestReadTsvStateWithErrors(unittest.TestCase):
     def test_malformed_line(self):
@@ -804,6 +843,7 @@ class TestReadTsvStateWithErrors(unittest.TestCase):
 # run_workflow — WorkflowLock (context manager)
 # ---------------------------------------------------------------------------
 
+
 class TestWorkflowLock(unittest.TestCase):
     def test_lock_acquires_and_releases(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -816,16 +856,13 @@ class TestWorkflowLock(unittest.TestCase):
 # run_workflow — ensure_state (creates state directory structure)
 # ---------------------------------------------------------------------------
 
+
 class TestEnsureState(unittest.TestCase):
     def test_creates_state_dirs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             wdir = Path(tmpdir)
             paths = run_workflow.build_paths(wdir)
-            manifest = {
-                "steps": [
-                    {"id": "01-run", "requires_approval": False}
-                ]
-            }
+            manifest = {"steps": [{"id": "01-run", "requires_approval": False}]}
             run_workflow.ensure_state(paths, manifest)
             self.assertTrue(paths.state_dir.exists())
             self.assertTrue(paths.log_dir.exists())
@@ -845,6 +882,7 @@ class TestEnsureState(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # workflow_schema — _topological_step_order (DAG cycle detection)
 # ---------------------------------------------------------------------------
+
 
 class TestTopologicalStepOrder(unittest.TestCase):
     def _manifest(self, steps):
@@ -881,6 +919,7 @@ class TestTopologicalStepOrder(unittest.TestCase):
 # workflow_schema — validate_manifest: audit field errors
 # ---------------------------------------------------------------------------
 
+
 class TestValidateManifestAuditField(unittest.TestCase):
     def test_bad_audit_enabled(self):
         manifest = _minimal_valid_manifest(Path("/tmp"))
@@ -899,6 +938,7 @@ class TestValidateManifestAuditField(unittest.TestCase):
 # workflow_schema — validate_manifest: environment.network_mode
 # ---------------------------------------------------------------------------
 
+
 class TestValidateManifestEnvironment(unittest.TestCase):
     def test_missing_network_mode(self):
         manifest = _minimal_valid_manifest(Path("/tmp"))
@@ -910,6 +950,7 @@ class TestValidateManifestEnvironment(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # lint_determinism — scan_todos
 # ---------------------------------------------------------------------------
+
 
 class TestScanTodos(unittest.TestCase):
     def test_todo_flagged(self):
@@ -943,6 +984,7 @@ class TestScanTodos(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # approval_notifier — pure functions
 # ---------------------------------------------------------------------------
+
 
 class TestApprovalNotifierReadTsv(unittest.TestCase):
     def test_missing_file(self):
@@ -1008,19 +1050,25 @@ class TestApprovalNotifierFindPending(unittest.TestCase):
 
     def test_pending_approval_status(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            wdir, manifest = self._setup_workflow(tmpdir, {
-                "01-run": "done",
-                "02-gate": "pending-approval",
-            })
+            wdir, manifest = self._setup_workflow(
+                tmpdir,
+                {
+                    "01-run": "done",
+                    "02-gate": "pending-approval",
+                },
+            )
             pending = approval_notifier.find_pending_approvals(wdir, manifest)
             self.assertTrue(any(p["step_id"] == "02-gate" for p in pending))
 
     def test_all_done_returns_empty(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            wdir, manifest = self._setup_workflow(tmpdir, {
-                "01-run": "done",
-                "02-gate": "done",
-            })
+            wdir, manifest = self._setup_workflow(
+                tmpdir,
+                {
+                    "01-run": "done",
+                    "02-gate": "done",
+                },
+            )
             pending = approval_notifier.find_pending_approvals(wdir, manifest)
             self.assertEqual(pending, [])
 
@@ -1030,12 +1078,14 @@ class TestApprovalNotifierBuildPayloads(unittest.TestCase):
         return {"workflow_name": "my-wf", "steps": []}
 
     def _pending(self):
-        return [{
-            "step_id": "03-review",
-            "step_name": "Review",
-            "requires_approval": True,
-            "approve_command": "python3 scripts/run_workflow.py . --approve 03-review",
-        }]
+        return [
+            {
+                "step_id": "03-review",
+                "step_name": "Review",
+                "requires_approval": True,
+                "approve_command": "python3 scripts/run_workflow.py . --approve 03-review",
+            }
+        ]
 
     def test_generic_payload_structure(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1071,10 +1121,12 @@ class TestApprovalNotifierRunOnceDryRun(unittest.TestCase):
             (wdir / "workflow.json").write_text(json.dumps(manifest), encoding="utf-8")
 
             args = approval_notifier.parse_args([str(wdir), "--dry-run"])
-            import io, contextlib
+            import contextlib
+            import io
+
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                rc = approval_notifier.run_once(args)
+                approval_notifier.run_once(args)
             output = buf.getvalue()
             self.assertIn("Dry run", output)
 
@@ -1103,7 +1155,9 @@ class TestApprovalNotifierRunOnceDryRun(unittest.TestCase):
             }
             (wdir / "workflow.json").write_text(json.dumps(manifest), encoding="utf-8")
             args = approval_notifier.parse_args([str(wdir)])
-            import io, contextlib
+            import contextlib
+            import io
+
             buf = io.StringIO()
             with contextlib.redirect_stderr(buf):
                 rc = approval_notifier.run_once(args)
@@ -1128,6 +1182,7 @@ class TestLintResolveWorkflowDir(unittest.TestCase):
 # workflow_schema — resolve_workflow_dir
 # ---------------------------------------------------------------------------
 
+
 class TestSchemaResolveWorkflowDir(unittest.TestCase):
     def test_dir_returns_itself(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1146,6 +1201,7 @@ class TestSchemaResolveWorkflowDir(unittest.TestCase):
 # workflow_schema — Issue.to_dict
 # ---------------------------------------------------------------------------
 
+
 class TestIssueToDict(unittest.TestCase):
     def test_to_dict(self):
         issue = workflow_schema.Issue(severity="error", message="bad field", path="/some/path")
@@ -1163,6 +1219,7 @@ class TestIssueToDict(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # workflow_schema — load_manifest
 # ---------------------------------------------------------------------------
+
 
 class TestLoadManifest(unittest.TestCase):
     def test_valid_json(self):
@@ -1202,7 +1259,9 @@ class TestVerifyWorkflowMain(unittest.TestCase):
             wdir = Path(tmpdir)
             manifest = _minimal_valid_manifest(wdir)
             (wdir / "workflow.json").write_text(json.dumps(manifest), encoding="utf-8")
-            import io, contextlib
+            import contextlib
+            import io
+
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 verify_workflow.main([tmpdir, "--simulate"])
@@ -1233,7 +1292,9 @@ class TestChoosePolicyPack(unittest.TestCase):
         self.assertEqual(compile_workflow.choose_policy_pack("release", "deploy"), "strict-prod")
 
     def test_code_fix_uses_ai_sidecar_safe(self):
-        self.assertEqual(compile_workflow.choose_policy_pack("code-fix", "fix test"), "ai-sidecar-safe")
+        self.assertEqual(
+            compile_workflow.choose_policy_pack("code-fix", "fix test"), "ai-sidecar-safe"
+        )
 
 
 if __name__ == "__main__":

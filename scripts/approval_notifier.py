@@ -43,17 +43,17 @@ def find_pending_approvals(workflow_dir: Path, manifest: dict) -> list[dict]:
     for step in manifest.get("steps", []):
         step_id = step.get("id", "")
         status = step_state.get(step_id, "pending")
-        if status == "pending-approval" or (
-            step.get("requires_approval") and status == "pending"
-        ):
-            pending.append({
-                "step_id": step_id,
-                "step_name": step.get("name", step_id),
-                "requires_approval": bool(step.get("requires_approval")),
-                "approve_command": (
-                    f"python3 scripts/run_workflow.py {workflow_dir} --approve {step_id}"
-                ),
-            })
+        if status == "pending-approval" or (step.get("requires_approval") and status == "pending"):
+            pending.append(
+                {
+                    "step_id": step_id,
+                    "step_name": step.get("name", step_id),
+                    "requires_approval": bool(step.get("requires_approval")),
+                    "approve_command": (
+                        f"python3 scripts/run_workflow.py {workflow_dir} --approve {step_id}"
+                    ),
+                }
+            )
     return pending
 
 
@@ -82,16 +82,18 @@ def build_slack_payload(workflow_dir: Path, manifest: dict, pending: list[dict])
         },
     ]
     for item in pending:
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    f"*Step:* `{item['step_id']}` — {item['step_name']}\n"
-                    f"*Approve with:*\n```{item['approve_command']}```"
-                ),
-            },
-        })
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*Step:* `{item['step_id']}` — {item['step_name']}\n"
+                        f"*Approve with:*\n```{item['approve_command']}```"
+                    ),
+                },
+            }
+        )
     blocks.append({"type": "divider"})
     return {"blocks": blocks, "text": f"Approval required for {wf_name}"}
 
@@ -115,7 +117,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("workflow_dir", help="Workflow directory path.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--webhook-url", help="POST payload to this URL.")
-    group.add_argument("--slack", metavar="WEBHOOK_URL", help="POST Slack Block Kit message to this URL.")
+    group.add_argument(
+        "--slack", metavar="WEBHOOK_URL", help="POST Slack Block Kit message to this URL."
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print payload without sending.")
     parser.add_argument(
         "--poll",
@@ -148,12 +152,17 @@ def run_once(args: argparse.Namespace) -> int:
         return 0
 
     if not url:
-        print("[approval-notifier] ERROR: --webhook-url or --slack required when not using --dry-run", file=sys.stderr)
+        print(
+            "[approval-notifier] ERROR: --webhook-url or --slack required when not using --dry-run",
+            file=sys.stderr,
+        )
         return 1
 
     try:
         status = post_json(url, payload)
-        print(f"[approval-notifier] Posted. HTTP {status}. Pending steps: {[p['step_id'] for p in pending]}")
+        print(
+            f"[approval-notifier] Posted. HTTP {status}. Pending steps: {[p['step_id'] for p in pending]}"
+        )
     except Exception as exc:
         print(f"[approval-notifier] ERROR: {exc}", file=sys.stderr)
         return 1
